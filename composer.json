@@ -1,0 +1,52 @@
+{
+    "name": "salvaworld/push-notification-php",
+    "description": "Laravel Package to send push notifications to Android and IOS devices. (GCM,FCM,APN)",
+    "keywords": [
+        "salvaworld",
+        "Laravel",
+        "push",
+        "notification",
+        "gcm",
+        "apn",
+        "fcm",
+        "high",
+        "priority"
+    ],
+    "license": "MIT",
+    "support": {
+        "issues": "https://github.com/Salvaworld/push-notification-php/issues",
+        "source": "https://github.com/Salvaworld/push-notification-php"
+    },
+    "authors": [
+        {
+            "name": "Salva",
+            "email": "info@salvaworld.com",
+            "homepage": "http://salvaworld.com"
+        }
+    ],
+    "require": {
+        "php": "^8.2",
+        "guzzlehttp/guzzle": "^7.9",
+        "illuminate/support": "^11.22",
+        "illuminate/notifications": "^11.22",
+        "firebase/php-jwt": "^6.10"
+    },
+    "autoload": {
+        "psr-4": {
+            "SalvaWorld\\PushNotification\\": "src/"
+        }
+    },
+    "extra": {
+        "laravel": {
+            "providers": [
+                "SalvaWorld\\PushNotification\\Providers\\PushNotificationServiceProvider"
+            ],
+            "aliases": {
+                "PushNotification": "SalvaWorld\\PushNotification\\Facades\\PushNotification"
+            }
+        }
+    },
+    "require-dev": {
+        "phpunit/phpunit": "^11.3"
+    }
+}
