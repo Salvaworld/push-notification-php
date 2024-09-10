@@ -27,8 +27,8 @@
     "require": {
         "php": "^8.2",
         "guzzlehttp/guzzle": "^7.9",
-        "illuminate/support": "^11.22",
-        "illuminate/notifications": "^11.22",
+        "illuminate/support": "^10",
+        "illuminate/notifications": "^10",
         "firebase/php-jwt": "^6.10"
     },
     "autoload": {
