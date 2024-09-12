@@ -29,7 +29,8 @@
         "guzzlehttp/guzzle": "^7.9",
         "illuminate/support": "^10",
         "illuminate/notifications": "^10",
-        "firebase/php-jwt": "^6.10"
+        "firebase/php-jwt": "^6.10",
+        "laravel/framework": "^10"
     },
     "autoload": {
         "psr-4": {

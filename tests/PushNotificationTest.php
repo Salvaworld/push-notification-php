@@ -307,8 +307,6 @@ class PushNotificationTest extends TestCase {
         fwrite($fh, 'badcert');
         fclose($fh);
 
-        $expected = 0;
-
         // ZZZ: intentional failure use-case so let's not
         // waste time attemping to push with a bad cert.
         $push->setConfig([

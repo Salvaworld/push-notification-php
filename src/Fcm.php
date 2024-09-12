@@ -1,4 +1,5 @@
 <?php
+
 namespace SalvaWorld\PushNotification;
 
 use Firebase\JWT\JWT;
