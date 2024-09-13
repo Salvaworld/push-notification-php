@@ -1,4 +1,5 @@
 <?php
+
 namespace SalvaWorld\PushNotification\Channels;
 
 use Illuminate\Notifications\Notification;

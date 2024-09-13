@@ -1,8 +1,10 @@
 <?php
+
 namespace SalvaWorld\PushNotification;
 
 use Illuminate\Support\Arr;
 use SalvaWorld\PushNotification\Contracts\PushServiceInterface;
+use Illuminate\Notifications\Notification;
 
 class Apn extends PushService implements PushServiceInterface {
     const APNS_DEVELOPMENT_SERVER = 'https://api.development.push.apple.com';
@@ -101,8 +103,8 @@ class Apn extends PushService implements PushServiceInterface {
         }
 
         $mh = $this->curlMultiHandle;
-        $errors = [];
-
+        
+        $running = 0;
         $i = 0;
         while (!empty($deviceTokens) && $i++ < $this->nbConcurrentRequests) {
             $deviceToken = array_pop($deviceTokens);

@@ -1,4 +1,5 @@
 <?php
+
 namespace SalvaWorld\PushNotification\Facades;
 
 use Illuminate\Support\Facades\Facade;

@@ -12,3 +12,7 @@ src/Config/iosCertificates/
 phpunit.phar
 phpunit.xml
 .phpunit.result.cache
+
+.project
+.buildpath
+.settings
