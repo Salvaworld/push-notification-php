@@ -122,14 +122,14 @@ class Fcm extends PushService implements PushServiceInterface {
 
             $message['message']['token'] = $token;
             $headers = $this->addRequestHeaders();
-            if (!empty($message['data'])) {
+            if (!empty($message['message']['data'])) {
                 $data = [];
-                if (!empty($message['data'])) {
-                    foreach($message['data'] as $key => $value) {
+                if (!empty($message['message']['data'])) {
+                    foreach($message['message']['data'] as $key => $value) {
                         $data[$key] = (string)$value;
                     }
                 }
-                $data['message']['data'] = $data;
+                $message['message']['data'] = $data;
             }
             try {
                 $result = $this->client->post(
