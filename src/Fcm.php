@@ -117,9 +117,7 @@ class Fcm extends PushService implements PushServiceInterface {
      * @return \stdClass  GCM Response
      */
     public function send(array $deviceTokens, array $message) {
-
         foreach ($deviceTokens as $token) {
-
             $message['message']['token'] = $token;
             $headers = $this->addRequestHeaders();
             if (!empty($message['message']['data'])) {
@@ -148,9 +146,7 @@ class Fcm extends PushService implements PushServiceInterface {
 
             } catch (\Exception $e) {
                 $response = ['success' => false, 'error' => $e->getMessage()];
-                \Log::debug($e->getMessage());
                 $this->setFeedback(json_decode(json_encode($response)));
-
             }
         }
 
