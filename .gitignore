@@ -5,14 +5,13 @@
 Thumbs.db
 # Composer
 vendor/
-composer.lock
 # local files
 src/Config/iosCertificates/
 # phpunit
 phpunit.phar
 phpunit.xml
 .phpunit.result.cache
-
+auth.json
 .project
 .buildpath
 .settings
