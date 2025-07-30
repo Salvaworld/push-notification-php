@@ -35,6 +35,27 @@ class ApnChannel extends PushChannel {
             $data['aps']['badge'] = $message->badge;
         }
 
+        // Add headers for auth key method if needed
+        $headers = [];
+        
+        if (!empty($message->topic)) {
+            $headers['apns-topic'] = $message->topic;
+        }
+        
+        // Add priority header if specified
+        if (property_exists($message, 'priority') && !empty($message->priority)) {
+            $headers['apns-priority'] = $message->priority;
+        }
+        
+        // Add expiration header if specified
+        if (property_exists($message, 'expiration') && !empty($message->expiration)) {
+            $headers['apns-expiration'] = $message->expiration;
+        }
+        
+        if (!empty($headers)) {
+            $data['headers'] = $headers;
+        }
+
         return $data;
     }
 }

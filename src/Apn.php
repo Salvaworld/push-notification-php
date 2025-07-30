@@ -39,6 +39,13 @@ class Apn extends PushService implements PushServiceInterface {
      * @var resource
      */
     private $curlMultiHandle;
+    
+    /**
+     * JWT Generator for auth key authentication
+     *
+     * @var ApnJwtGenerator
+     */
+    private $jwtGenerator;
 
     /**
      * Apn constructor.
@@ -49,8 +56,40 @@ class Apn extends PushService implements PushServiceInterface {
         }
 
         $this->url = self::APNS_PRODUCTION_SERVER;
-
         $this->config = $this->initializeConfig('apn');
+        
+        // Initialize JWT generator if using auth key
+        if ($this->isUsingAuthKey()) {
+            $this->initializeJwtGenerator();
+        }
+    }
+
+    /**
+     * Check if configuration is set to use auth key authentication
+     *
+     * @return bool
+     */
+    private function isUsingAuthKey() {
+        return isset($this->config['use_auth_key']) && 
+               $this->config['use_auth_key'] === true &&
+               isset($this->config['auth_key']) &&
+               isset($this->config['key_id']) &&
+               isset($this->config['team_id']);
+    }
+    
+    /**
+     * Initialize JWT generator for auth key authentication
+     */
+    private function initializeJwtGenerator() {
+        try {
+            $this->jwtGenerator = new ApnJwtGenerator(
+                $this->config['key_id'],
+                $this->config['team_id'],
+                $this->config['auth_key']
+            );
+        } catch (\Exception $e) {
+            throw new \Exception("Failed to initialize JWT generator: " . $e->getMessage());
+        }
     }
 
     /**
@@ -79,7 +118,8 @@ class Apn extends PushService implements PushServiceInterface {
      * @return \stdClass  APN Response
      */
     public function send(array $deviceTokens, array $message) {
-        if (false == $this->existCertificate()) {
+        // Check authentication method availability
+        if (!$this->isUsingAuthKey() && !$this->existCertificate()) {
             return $this->feedback;
         }
 
@@ -197,7 +237,7 @@ class Apn extends PushService implements PushServiceInterface {
     /**
      * Get Url for APNs production server.
      *
-     * @param Notification $notification
+     * @param string $deviceToken
      * @return string
      */
     private function getProductionUrl(string $deviceToken) {
@@ -207,7 +247,7 @@ class Apn extends PushService implements PushServiceInterface {
     /**
      * Get Url for APNs sandbox server.
      *
-     * @param Notification $notification
+     * @param string $deviceToken
      * @return string
      */
     private function getSandboxUrl(string $deviceToken) {
@@ -217,7 +257,7 @@ class Apn extends PushService implements PushServiceInterface {
     /**
      * Get Url path.
      *
-     * @param Notification $notification
+     * @param string $deviceToken
      * @return mixed
      */
     private function getUrlPath(string $deviceToken) {
@@ -238,10 +278,9 @@ class Apn extends PushService implements PushServiceInterface {
     }
 
     /**
-     * @param $token
+     * @param $deviceToken
      * @param array $message
-     * @param $request
-     * @param array $deviceTokens
+     * @return resource
      */
     public function prepareHandle($deviceToken, array $message) {
         $uri = false === $this->config['dry_run'] ? $this->getProductionUrl($deviceToken) : $this->getSandboxUrl($deviceToken);
@@ -262,18 +301,31 @@ class Apn extends PushService implements PushServiceInterface {
             CURLOPT_RETURNTRANSFER => true,
             CURLOPT_TIMEOUT => 10,
             CURLOPT_HEADER => true,
-
-            CURLOPT_SSLCERT => $config['certificate'],
             CURLOPT_SSL_VERIFYPEER => true,
         ];
 
-        if (isset($config['passPhrase'])) {
-            $options[CURLOPT_SSLCERTPASSWD] = $config['passPhrase'];
+        // Configure authentication method
+        if ($this->isUsingAuthKey()) {
+            // Use JWT token in Authorization header
+            $jwt = $this->jwtGenerator->generateToken();
+            $headers['authorization'] = 'bearer ' . $jwt;
+            
+            // Add required headers for auth key method
+            if (isset($config['bundle_id'])) {
+                $headers['apns-topic'] = $config['bundle_id'];
+            }
+        } else {
+            // Use certificate-based authentication
+            $options[CURLOPT_SSLCERT] = $config['certificate'];
+            
+            if (isset($config['passPhrase'])) {
+                $options[CURLOPT_SSLCERTPASSWD] = $config['passPhrase'];
+            }
         }
 
         $ch = curl_init();
-
         curl_setopt_array($ch, $options);
+        
         if (!empty($headers)) {
             curl_setopt($ch, CURLOPT_HTTPHEADER, $this->decorateHeaders($headers));
         }
@@ -285,14 +337,14 @@ class Apn extends PushService implements PushServiceInterface {
     }
 
     /**
-     * Set the feedback with no exist any certificate.
+     * Set the feedback with no exist any certificate or auth key.
      *
      * @return mixed|void
      */
-    private function messageNoExistCertificate() {
+    private function messageNoExistAuthMethod() {
         $response = [
             'success' => false,
-            'error' => "Please, add your APN certificate to the iosCertificates folder." . PHP_EOL,
+            'error' => "Please, add your APN certificate to the iosCertificates folder or configure auth key authentication." . PHP_EOL,
         ];
 
         $this->setFeedback(json_decode(json_encode($response)));
@@ -306,15 +358,14 @@ class Apn extends PushService implements PushServiceInterface {
         if (isset($this->config['certificate'])) {
             $certificate = $this->config['certificate'];
             if (!file_exists($certificate)) {
-                $this->messageNoExistCertificate();
+                $this->messageNoExistAuthMethod();
                 return false;
             }
 
             return true;
         }
 
-        $this->messageNoExistCertificate();
+        $this->messageNoExistAuthMethod();
         return false;
     }
-
 }
