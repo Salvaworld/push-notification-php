@@ -4,7 +4,6 @@ namespace SalvaWorld\PushNotification;
 
 use Illuminate\Support\Arr;
 use SalvaWorld\PushNotification\Contracts\PushServiceInterface;
-use Illuminate\Notifications\Notification;
 
 class Apn extends PushService implements PushServiceInterface {
     const APNS_DEVELOPMENT_SERVER = 'https://api.development.push.apple.com';
@@ -70,9 +69,7 @@ class Apn extends PushService implements PushServiceInterface {
      * @return bool
      */
     private function isUsingAuthKey() {
-        return isset($this->config['use_auth_key']) && 
-               $this->config['use_auth_key'] === true &&
-               isset($this->config['auth_key']) &&
+        return isset($this->config['auth_key']) &&
                isset($this->config['key_id']) &&
                isset($this->config['team_id']);
     }
@@ -118,8 +115,7 @@ class Apn extends PushService implements PushServiceInterface {
      * @return \stdClass  APN Response
      */
     public function send(array $deviceTokens, array $message) {
-        // Check authentication method availability
-        if (!$this->isUsingAuthKey() && !$this->existCertificate()) {
+        if (!$this->isUsingAuthKey()) {
             return $this->feedback;
         }
 
@@ -314,13 +310,6 @@ class Apn extends PushService implements PushServiceInterface {
             if (isset($config['bundle_id'])) {
                 $headers['apns-topic'] = $config['bundle_id'];
             }
-        } else {
-            // Use certificate-based authentication
-            $options[CURLOPT_SSLCERT] = $config['certificate'];
-            
-            if (isset($config['passPhrase'])) {
-                $options[CURLOPT_SSLCERTPASSWD] = $config['passPhrase'];
-            }
         }
 
         $ch = curl_init();
@@ -336,36 +325,4 @@ class Apn extends PushService implements PushServiceInterface {
         return $ch;
     }
 
-    /**
-     * Set the feedback with no exist any certificate or auth key.
-     *
-     * @return mixed|void
-     */
-    private function messageNoExistAuthMethod() {
-        $response = [
-            'success' => false,
-            'error' => "Please, add your APN certificate to the iosCertificates folder or configure auth key authentication." . PHP_EOL,
-        ];
-
-        $this->setFeedback(json_decode(json_encode($response)));
-    }
-
-    /**
-     * Check if the certificate file exist.
-     * @return bool
-     */
-    private function existCertificate() {
-        if (isset($this->config['certificate'])) {
-            $certificate = $this->config['certificate'];
-            if (!file_exists($certificate)) {
-                $this->messageNoExistAuthMethod();
-                return false;
-            }
-
-            return true;
-        }
-
-        $this->messageNoExistAuthMethod();
-        return false;
-    }
 }
