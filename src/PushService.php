@@ -74,6 +74,18 @@ abstract class PushService {
     }
 
     /**
+     * Send multiple notifications, each token with its own payload.
+     * Subclasses may override this for concurrent implementations.
+     *
+     * @param array $tokenMessagePairs  [['token' => string, 'message' => array], ...]
+     */
+    public function sendBatch(array $tokenMessagePairs): void {
+        foreach ($tokenMessagePairs as $pair) {
+            $this->send([$pair['token']], $pair['message']);
+        }
+    }
+
+    /**
      * Return property if exit otherwise null.
      *
      * @param $property

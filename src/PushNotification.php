@@ -144,6 +144,15 @@ class PushNotification {
     }
 
     /**
+     * Send multiple notifications concurrently, each token with its own payload.
+     *
+     * @param array $tokenMessagePairs  [['token' => string, 'message' => array], ...]
+     */
+    public function sendBatch(array $tokenMessagePairs): void {
+        $this->service->sendBatch($tokenMessagePairs);
+    }
+
+    /**
      * Return property if exit here or in service object, otherwise null.
      *
      * @param $property

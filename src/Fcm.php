@@ -5,6 +5,8 @@ namespace SalvaWorld\PushNotification;
 use Firebase\JWT\JWT;
 use GuzzleHttp\Client;
 use GuzzleHttp\Exception\GuzzleException;
+use GuzzleHttp\Pool;
+use GuzzleHttp\Psr7\Request;
 use GuzzleHttp\RequestOptions;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Cache;
@@ -26,7 +28,10 @@ class Fcm extends PushService implements PushServiceInterface {
     public function __construct() {
         $this->config = $this->initializeConfig('fcm');
         $this->url = "https://fcm.googleapis.com/v1/projects/{$this->config['project_id']}/messages:send";
-        $this->client = new Client();
+        $this->client = new Client([
+            'timeout'         => 10,
+            'connect_timeout' => 5,
+        ]);
     }
 
     /**
@@ -87,7 +92,7 @@ class Fcm extends PushService implements PushServiceInterface {
 
             $jwtEncoded = JWT::encode($payload, $serviceAccount['private_key'], 'RS256');
 
-            $client = new Client();
+            $client = new Client(['timeout' => 10, 'connect_timeout' => 5]);
             try {
                 $startTime = time();
                 $tokenResponse = $client->post('https://oauth2.googleapis.com/token', [
@@ -117,40 +122,75 @@ class Fcm extends PushService implements PushServiceInterface {
      * @return \stdClass  GCM Response
      */
     public function send(array $deviceTokens, array $message) {
-        foreach ($deviceTokens as $token) {
-            $message['message']['token'] = $token;
-            $headers = $this->addRequestHeaders();
-            if (!empty($message['message']['data'])) {
-                $data = [];
-                if (!empty($message['message']['data'])) {
-                    foreach($message['message']['data'] as $key => $value) {
-                        $data[$key] = (string)$value;
-                    }
-                }
-                $message['message']['data'] = $data;
+        $headers = $this->addRequestHeaders();
+
+        if (!empty($message['message']['data'])) {
+            $data = [];
+            foreach ($message['message']['data'] as $key => $value) {
+                $data[$key] = (string) $value;
             }
+            $message['message']['data'] = $data;
+        }
+
+        foreach ($deviceTokens as $token) {
+            $payload = $message;
+            $payload['message']['token'] = $token;
             try {
                 $result = $this->client->post(
                     $this->url,
                     [
                         RequestOptions::HEADERS => $headers,
-                        RequestOptions::JSON => $message,
+                        RequestOptions::JSON    => $payload,
                     ]
                 );
-
-                $json = $result->getBody();
-
-                $this->setFeedback(json_decode($json, false, 512, JSON_BIGINT_AS_STRING));
-
-                return $this->feedback;
-
+                $this->setFeedback(json_decode($result->getBody(), false, 512, JSON_BIGINT_AS_STRING));
             } catch (\Exception $e) {
-                $response = ['success' => false, 'error' => $e->getMessage()];
-                $this->setFeedback(json_decode(json_encode($response)));
+                $this->setFeedback(json_decode(json_encode(['success' => false, 'error' => $e->getMessage()])));
             }
         }
 
         return $this->feedback;
+    }
 
+    /**
+     * Send multiple notifications concurrently, each token with its own payload.
+     *
+     * @param array $tokenMessagePairs  [['token' => string, 'message' => array], ...]
+     */
+    public function sendBatch(array $tokenMessagePairs): void {
+        if (empty($tokenMessagePairs)) {
+            return;
+        }
+
+        $headers = $this->addRequestHeaders();
+
+        $requests = function () use ($tokenMessagePairs, $headers) {
+            foreach ($tokenMessagePairs as $pair) {
+                $payload = $pair['message'];
+                $payload['message']['token'] = $pair['token'];
+
+                if (!empty($payload['message']['data'])) {
+                    $data = [];
+                    foreach ($payload['message']['data'] as $key => $value) {
+                        $data[$key] = (string) $value;
+                    }
+                    $payload['message']['data'] = $data;
+                }
+
+                yield new Request('POST', $this->url, $headers, json_encode($payload));
+            }
+        };
+
+        $pool = new Pool($this->client, $requests(), [
+            'concurrency' => 25,
+            'fulfilled'   => function ($response) {
+                $this->setFeedback(json_decode($response->getBody(), false, 512, JSON_BIGINT_AS_STRING));
+            },
+            'rejected'    => function ($reason) {
+                Log::warning('FCM batch send failed: ' . $reason->getMessage());
+            },
+        ]);
+
+        $pool->promise()->wait();
     }
 }
