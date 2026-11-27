@@ -2,6 +2,8 @@
 
 namespace SalvaWorld\PushNotification;
 
+use Firebase\JWT\JWT;
+
 class ApnJwtGenerator {
     
     private $keyId;
@@ -42,33 +44,18 @@ class ApnJwtGenerator {
             }
         }
         
-        $header = [
-            'alg' => 'ES256',
-            'kid' => $this->keyId
-        ];
-        
         $payload = [
             'iss' => $this->teamId,
             'iat' => time()
         ];
-        
-        $headerEncoded = $this->base64UrlEncode(json_encode($header));
-        $payloadEncoded = $this->base64UrlEncode(json_encode($payload));
-        
-        $signature = '';
-        $success = openssl_sign(
-            $headerEncoded . '.' . $payloadEncoded,
-            $signature,
-            $this->privateKey,
-            OPENSSL_ALGO_SHA256
-        );
-        
-        if (!$success) {
-            throw new \Exception("Failed to sign JWT token");
+
+        // ES256 needs the raw 64 byte R || S signature. openssl_sign returns an ASN.1 DER signature,
+        // which Apple rejects with InvalidProviderToken, so let firebase/php-jwt build and convert it.
+        try {
+            $jwt = JWT::encode($payload, $this->privateKey, 'ES256', $this->keyId);
+        } catch (\Throwable $e) {
+            throw new \Exception("Failed to sign JWT token: " . $e->getMessage(), 0, $e);
         }
-        
-        $signatureEncoded = $this->base64UrlEncode($signature);
-        $jwt = $headerEncoded . '.' . $payloadEncoded . '.' . $signatureEncoded;
         
         // Cache the token
         $this->tokenCache[$cacheKey] = [
@@ -77,16 +64,6 @@ class ApnJwtGenerator {
         ];
         
         return $jwt;
-    }
-    
-    /**
-     * Base64 URL encode
-     * 
-     * @param string $data
-     * @return string
-     */
-    private function base64UrlEncode($data) {
-        return rtrim(strtr(base64_encode($data), '+/', '-_'), '=');
     }
     
     /**

@@ -47,6 +47,20 @@ class Apn extends PushService implements PushServiceInterface {
     private $jwtGenerator;
 
     /**
+     * Gateway each device token was last sent to: true for the sandbox, false for production.
+     *
+     * @var array<string, bool>
+     */
+    private $gateways = [];
+
+    /**
+     * Device tokens already retried on the other gateway, so each is retried once at most.
+     *
+     * @var array<string, bool>
+     */
+    private $retried = [];
+
+    /**
      * Apn constructor.
      */
     public function __construct() {
@@ -118,6 +132,9 @@ class Apn extends PushService implements PushServiceInterface {
         if (!$this->isUsingAuthKey()) {
             return $this->feedback;
         }
+
+        $this->gateways = [];
+        $this->retried = [];
 
         $responseCollection = [
             'success' => true,
@@ -200,6 +217,18 @@ class Apn extends PushService implements PushServiceInterface {
                     continue;
                 }
 
+                // A token only works on the gateway of the build that registered it. When Apple says the
+                // token is bad here, it usually belongs to the other gateway, so try that one before giving up.
+                $reason = json_decode((string) $body, true)['reason'] ?? null;
+                if ($this->shouldFallBack($statusCode, $reason, (string) $token)) {
+                    $this->retried[$token] = true;
+                    curl_multi_remove_handle($mh, $handle);
+                    curl_close($handle);
+                    curl_multi_add_handle($mh, $this->prepareHandle($token, $message, !($this->gateways[$token] ?? true)));
+                    $running++;
+                    continue;
+                }
+
                 $responseCollection['success'] = $responseCollection['success'] && $statusCode == 200;
 
                 $responseCollection['results'][] = [
@@ -207,6 +236,7 @@ class Apn extends PushService implements PushServiceInterface {
                     'headers' => $headers,
                     'body' => (string) $body,
                     'token' => $token,
+                    'gateway' => ($this->gateways[$token] ?? $this->usesSandbox()) ? 'sandbox' : 'production',
                 ];
                 curl_multi_remove_handle($mh, $handle);
                 curl_close($handle);
@@ -251,6 +281,40 @@ class Apn extends PushService implements PushServiceInterface {
     }
 
     /**
+     * Whether the configured gateway is the sandbox. Only an explicit dry_run of false means production.
+     *
+     * @return bool
+     */
+    protected function usesSandbox(): bool {
+        return false !== ($this->config['dry_run'] ?? true);
+    }
+
+    /**
+     * @param string $deviceToken
+     * @param bool $sandbox
+     * @return string
+     */
+    protected function gatewayUrl(string $deviceToken, bool $sandbox): string {
+        return $sandbox ? $this->getSandboxUrl($deviceToken) : $this->getProductionUrl($deviceToken);
+    }
+
+    /**
+     * Whether a refused token should be retried on the other gateway. Controlled by the
+     * gateway_fallback config key, on by default.
+     *
+     * @param int $status
+     * @param string|null $reason
+     * @param string $token
+     * @return bool
+     */
+    protected function shouldFallBack(int $status, ?string $reason, string $token): bool {
+        return ($this->config['gateway_fallback'] ?? true)
+            && $status === 400
+            && $reason === 'BadDeviceToken'
+            && empty($this->retried[$token]);
+    }
+
+    /**
      * Get Url path.
      *
      * @param string $deviceToken
@@ -278,8 +342,10 @@ class Apn extends PushService implements PushServiceInterface {
      * @param array $message
      * @return resource
      */
-    public function prepareHandle($deviceToken, array $message) {
-        $uri = false === $this->config['dry_run'] ? $this->getProductionUrl($deviceToken) : $this->getSandboxUrl($deviceToken);
+    public function prepareHandle($deviceToken, array $message, ?bool $sandbox = null) {
+        $sandbox = $sandbox ?? $this->usesSandbox();
+        $this->gateways[$deviceToken] = $sandbox;
+        $uri = $this->gatewayUrl($deviceToken, $sandbox);
         $headers = $message['headers'] ?? [];
         if (isset($message['headers'])) {
             unset($message['headers']);
